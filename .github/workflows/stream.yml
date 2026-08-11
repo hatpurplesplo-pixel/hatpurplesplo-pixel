@@ -1,19 +1,15 @@
-name: STRATA 24/7 YouTube Stream
+name: STRATA 24/7 YouTube Stream (browser)
 
 on:
-  # Manual "start now" button in the Actions tab.
   workflow_dispatch: {}
 
-  # Auto-restart every 5 hours. GitHub-hosted runner jobs hard-cap at
-  # 6 hours, so this fires before that limit and, combined with the
-  # concurrency block below, cleanly hands the stream off to a fresh job
-  # instead of letting it die when the runner is killed.
+  # Auto-restart every 5 hours — GitHub-hosted runner jobs hard-cap at
+  # 6 hours, so this fires before that limit.
   schedule:
     - cron: "0 */5 * * *"
 
 # Only one stream job at a time — a new scheduled run cancels whatever is
-# still going so two ffmpeg processes never fight over the same RTMP
-# endpoint.
+# still going so two pipelines never fight over the same RTMP endpoint.
 concurrency:
   group: strata-live-stream
   cancel-in-progress: true
@@ -24,32 +20,35 @@ permissions:
 jobs:
   stream:
     runs-on: ubuntu-latest
-    # Comfortably inside the 6-hour hard limit for GitHub-hosted runners,
-    # leaving headroom before the next scheduled run takes over.
     timeout-minutes: 350
 
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
 
-      - name: Install ffmpeg (+ a font for the text overlay)
+      - name: Install Xvfb, ffmpeg, fonts
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          sudo apt-get install -y --no-install-recommends \
+            xvfb ffmpeg fonts-liberation fonts-noto-color-emoji
+
+      # Plain 'apt-get install chromium' on ubuntu-latest routes through
+      # snap and is unreliable in CI, so we use a dedicated action that
+      # downloads a real Chrome-for-Testing binary directly instead.
+      - name: Install Chromium
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
 
       - name: Run streamer
         env:
           YOUTUBE_STREAM_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
           RTMP_BASE_URL: rtmp://a.rtmp.youtube.com/live2
+          CHROMIUM_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
           STREAM_WIDTH: "1280"
           STREAM_HEIGHT: "720"
           STREAM_FPS: "24"
-          STREAM_BITRATE: "2500k"
-          BACKGROUND_COLOR: "black"
-          # Set OVERLAY_TEXT (and optionally BACKGROUND_IMAGE, pointing at
-          # a file checked into the repo) via repo Variables if you want
-          # something on screen — see SETUP.md.
-          OVERLAY_TEXT: ${{ vars.OVERLAY_TEXT }}
-          BACKGROUND_IMAGE: ${{ vars.BACKGROUND_IMAGE }}
-          AUDIO_MODE: "silent"
+          STREAM_BITRATE: "3000k"
+          SCROLL_SPEED: "40"
         run: python3 stream.py
