@@ -46,9 +46,12 @@ jobs:
           YOUTUBE_STREAM_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
           RTMP_BASE_URL: rtmp://a.rtmp.youtube.com/live2
           CHROMIUM_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
-          STREAM_WIDTH: "1280"
-          STREAM_HEIGHT: "720"
+          STREAM_WIDTH: "720"
+          STREAM_HEIGHT: "1280"
           STREAM_FPS: "24"
           STREAM_BITRATE: "3000k"
           SCROLL_SPEED: "40"
+          # Point this at your mp3/wav once you've added it to the repo,
+          # e.g. public/soundtrack.mp3 — leave blank to stream silent.
+          AUDIO_PATH: ${{ vars.AUDIO_PATH }}
         run: python3 stream.py
