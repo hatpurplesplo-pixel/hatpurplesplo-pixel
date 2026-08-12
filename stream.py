@@ -57,6 +57,10 @@ PAGE_PATH = os.environ.get(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "public", "index.html"),
 )
 
+# Optional soundtrack to loop under the stream. Leave unset for silence.
+AUDIO_PATH = os.environ.get("AUDIO_PATH", "").strip()
+AUDIO_BITRATE = os.environ.get("AUDIO_BITRATE", "128k")
+
 RECONNECT_DELAY_SECONDS = int(os.environ.get("RECONNECT_DELAY_SECONDS", "5"))
 CHROME_WARMUP_SECONDS = int(os.environ.get("CHROME_WARMUP_SECONDS", "8"))
 XVFB_WARMUP_SECONDS = int(os.environ.get("XVFB_WARMUP_SECONDS", "2"))
@@ -107,6 +111,15 @@ def validate_config() -> None:
             f"FATAL: page file not found at {PAGE_PATH}. Add your "
             "public/index.html to the repo (set PAGE_PATH env var if it "
             "lives somewhere else).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if AUDIO_PATH and not os.path.isfile(AUDIO_PATH):
+        print(
+            f"FATAL: AUDIO_PATH is set to '{AUDIO_PATH}' but that file "
+            "doesn't exist. Add your mp3/wav to the repo at that path, or "
+            "clear AUDIO_PATH to stream silent.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -174,7 +187,7 @@ def run_once() -> int:
         # Let fonts/animation settle before ffmpeg starts grabbing frames.
         time.sleep(CHROME_WARMUP_SECONDS)
 
-        # 3. ffmpeg: capture the X11 display + silent audio, push RTMP -------
+        # 3. ffmpeg: capture the X11 display + audio, push RTMP --------------
         rtmp_url = f"{RTMP_BASE_URL}/{YOUTUBE_STREAM_KEY}"
         bitrate_k = _bitrate_num(STREAM_BITRATE)
         bufsize = f"{bitrate_k * 2}k"
@@ -184,11 +197,26 @@ def run_once() -> int:
             "ffmpeg", "-y", "-loglevel", "warning",
             "-f", "x11grab", "-video_size", f"{STREAM_WIDTH}x{STREAM_HEIGHT}",
             "-framerate", STREAM_FPS, "-draw_mouse", "0", "-i", DISPLAY,
-            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+        ]
+
+        if AUDIO_PATH:
+            # -stream_loop -1 repeats the file forever; -re paces it at
+            # real-time speed so it doesn't just blast through the whole
+            # track's duration in a few seconds of wall-clock time.
+            ffmpeg_cmd += ["-stream_loop", "-1", "-re", "-i", AUDIO_PATH]
+        else:
+            ffmpeg_cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
+
+        # Explicit mapping: video from input 0 (the x11grab display),
+        # audio from input 1 (the file or the silent generator) — this
+        # removes any ambiguity about which stream ffmpeg picks by default.
+        ffmpeg_cmd += ["-map", "0:v:0", "-map", "1:a:0"]
+
+        ffmpeg_cmd += [
             "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency",
             "-b:v", STREAM_BITRATE, "-maxrate", STREAM_BITRATE, "-bufsize", bufsize,
             "-pix_fmt", "yuv420p", "-g", gop,
-            "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
+            "-c:a", "aac", "-b:a", AUDIO_BITRATE, "-ar", "44100",
             "-f", "flv", rtmp_url,
         ]
         env_ffmpeg = dict(os.environ, DISPLAY=DISPLAY)
@@ -221,6 +249,10 @@ def main() -> None:
         flush=True,
     )
     print(f"Pushing to: {RTMP_BASE_URL}/<key hidden>", flush=True)
+    if AUDIO_PATH:
+        print(f"Audio: looping file '{AUDIO_PATH}'", flush=True)
+    else:
+        print("Audio: SILENT (AUDIO_PATH not set)", flush=True)
 
     while not _shutdown_requested:
         print(f"[{_ts()}] (re)starting pipeline...", flush=True)
@@ -247,6 +279,9 @@ def main() -> None:
 
     print(f"[{_ts()}] shutdown complete.", flush=True)
 
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
