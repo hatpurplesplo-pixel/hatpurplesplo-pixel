@@ -1,37 +1,29 @@
-name: STRATA 24/7 YouTube Stream (browser)
-
+name: Dino AI 24/7 YouTube Stream (browser)
 on:
   workflow_dispatch: {}
-
   # Auto-restart every 5 hours — GitHub-hosted runner jobs hard-cap at
   # 6 hours, so this fires before that limit.
   schedule:
     - cron: "0 */5 * * *"
-
 # Only one stream job at a time — a new scheduled run cancels whatever is
 # still going so two pipelines never fight over the same RTMP endpoint.
 concurrency:
-  group: strata-live-stream
+  group: dino-ai-live-stream
   cancel-in-progress: true
-
 permissions:
   contents: read
-
 jobs:
   stream:
     runs-on: ubuntu-latest
     timeout-minutes: 350
-
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
-
       - name: Install Xvfb, ffmpeg, fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             xvfb ffmpeg fonts-liberation fonts-noto-color-emoji
-
       # Plain 'apt-get install chromium' on ubuntu-latest routes through
       # snap and is unreliable in CI, so we use a dedicated action that
       # downloads a real Chrome-for-Testing binary directly instead.
@@ -40,7 +32,6 @@ jobs:
         uses: browser-actions/setup-chrome@v1
         with:
           chrome-version: stable
-
       - name: Run streamer
         env:
           YOUTUBE_STREAM_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
@@ -50,7 +41,6 @@ jobs:
           STREAM_HEIGHT: "1280"
           STREAM_FPS: "24"
           STREAM_BITRATE: "3000k"
-          SCROLL_SPEED: "40"
           # Point this at your mp3/wav once you've added it to the repo,
           # e.g. public/soundtrack.mp3 — leave blank to stream silent.
           AUDIO_PATH: ${{ vars.AUDIO_PATH }}
