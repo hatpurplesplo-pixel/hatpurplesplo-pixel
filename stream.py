@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-STRATA 24/7 YouTube Live streamer — browser-rendered edition, GitHub
+Dino AI 24/7 YouTube Live streamer — browser-rendered edition, GitHub
 Actions native (no Docker).
 
 Pipeline:
     Xvfb (virtual display)
-      -> Chromium, headful, loads public/index.html (real page, real
-         auto-scroll animation, no faking it with static overlays)
+      -> Chromium, headful, loads public/dino-game.html (the T-Rex AI
+         game + the "support me" banner, all self-contained in one file
+         - real rendering, nothing faked with a static overlay)
          -> ffmpeg (x11grab captures that display + a silent audio track)
             -> RTMP -> YouTube Live
 
@@ -44,17 +45,21 @@ STREAM_WIDTH = os.environ.get("STREAM_WIDTH", "1280")
 STREAM_HEIGHT = os.environ.get("STREAM_HEIGHT", "720")
 STREAM_FPS = os.environ.get("STREAM_FPS", "24")
 STREAM_BITRATE = os.environ.get("STREAM_BITRATE", "3000k")
-SCROLL_SPEED = os.environ.get("SCROLL_SPEED", "40")
 
 DISPLAY_NUM = os.environ.get("DISPLAY_NUM", "99")
 DISPLAY = f":{DISPLAY_NUM}"
 
 CHROMIUM_BINARY = os.environ.get("CHROMIUM_BINARY", "chromium")
 
-# Path to the page that gets rendered and streamed.
+# Path to the page that gets rendered and streamed. This is the combined
+# dino-game.html - the T-Rex game, its AI trainer, and the CSS-driven
+# support banner are all in this one file, so there's nothing else to
+# point at and no query-string config it reads (the old STRATA panel's
+# ?speed= param is gone along with the panel - the banner's scroll speed
+# is just a fixed value in the file's own CSS now).
 PAGE_PATH = os.environ.get(
     "PAGE_PATH",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "public", "index.html"),
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "public", "dino-game.html"),
 )
 
 # Optional soundtrack to loop under the stream. Leave unset for silence.
@@ -109,8 +114,8 @@ def validate_config() -> None:
     if not os.path.isfile(PAGE_PATH):
         print(
             f"FATAL: page file not found at {PAGE_PATH}. Add your "
-            "public/index.html to the repo (set PAGE_PATH env var if it "
-            "lives somewhere else).",
+            "public/dino-game.html to the repo (set PAGE_PATH env var if "
+            "it lives somewhere else).",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -156,8 +161,8 @@ def run_once() -> int:
         )
         time.sleep(XVFB_WARMUP_SECONDS)
 
-        # 2. Headful Chromium rendering the page, real auto-scroll included --
-        page_url = f"file://{PAGE_PATH}?speed={SCROLL_SPEED}"
+        # 2. Headful Chromium rendering the page ------------------------------
+        page_url = f"file://{PAGE_PATH}"
         env = dict(os.environ, DISPLAY=DISPLAY)
         chrome_log = open("/tmp/chromium.log", "wb")
         chrome_proc = subprocess.Popen(
@@ -242,10 +247,10 @@ def main() -> None:
 
     validate_config()
 
-    print("=== STRATA 24/7 streamer (browser-rendered, GitHub Actions) ===", flush=True)
+    print("=== Dino AI 24/7 streamer (browser-rendered, GitHub Actions) ===", flush=True)
     print(
         f"Resolution: {STREAM_WIDTH}x{STREAM_HEIGHT} @ {STREAM_FPS}fps | "
-        f"bitrate {STREAM_BITRATE} | scroll speed {SCROLL_SPEED}px/s",
+        f"bitrate {STREAM_BITRATE} | page: {PAGE_PATH}",
         flush=True,
     )
     print(f"Pushing to: {RTMP_BASE_URL}/<key hidden>", flush=True)
@@ -279,9 +284,6 @@ def main() -> None:
 
     print(f"[{_ts()}] shutdown complete.", flush=True)
 
-
-if __name__ == "__main__":
-    main()
 
 if __name__ == "__main__":
     main()
